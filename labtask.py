@@ -1,12 +1,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-# import matplotlib.pyplot as plt
-import json
-import random
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="VRP - ACO Dashboard", layout="wide")
-
 st.title("🚚 Vehicle Routing Problem (VRP) - ACO Dashboard")
 
 # --------------------------
@@ -16,11 +13,25 @@ uploaded_file = st.file_uploader("Upload your VRP CSV dataset", type="csv")
 
 if uploaded_file:
     data = pd.read_csv(uploaded_file)
+
+    # Check required columns
+    required_cols = ['x', 'y', 'demand']
+    for col in required_cols:
+        if col not in data.columns:
+            st.error(f"Column '{col}' is missing in the CSV file!")
+            st.stop()
+
     st.subheader("Dataset Preview")
     st.dataframe(data.head())
 
+    # Use vehicle_capacity from CSV if available, otherwise default to 10
+    if 'vehicle_capacity' in data.columns:
+        default_capacity = int(data['vehicle_capacity'][0])
+    else:
+        default_capacity = 10
+
     # --------------------------
-    # Step 2: Extract coordinates and distance matrix
+    # Step 2: Distance matrix
     # --------------------------
     nodes_xy = data[['x','y']].values
 
@@ -40,13 +51,13 @@ if uploaded_file:
     # Step 3: ACO Parameters (Interactive)
     # --------------------------
     st.sidebar.header("ACO Parameters")
-    num_ants = st.sidebar.number_input("Number of Ants", min_value=1, value=10)
-    num_iterations = st.sidebar.number_input("Number of Iterations", min_value=1, value=50)
-    alpha = st.sidebar.number_input("Alpha (pheromone importance)", min_value=0.1, value=1.0)
-    beta = st.sidebar.number_input("Beta (heuristic importance)", min_value=0.1, value=5.0)
-    rho = st.sidebar.number_input("Rho (pheromone evaporation)", min_value=0.01, max_value=1.0, value=0.1)
-    Q = st.sidebar.number_input("Q (pheromone deposit)", min_value=0.1, value=1.0)
-    vehicle_capacity = st.sidebar.number_input("Vehicle Capacity", min_value=1, value=int(data['vehicle_capacity'][0]))
+    num_ants = st.sidebar.number_input("Number of Ants", min_value=1, value=10, step=1)
+    num_iterations = st.sidebar.number_input("Number of Iterations", min_value=1, value=50, step=1)
+    alpha = st.sidebar.number_input("Alpha (pheromone importance)", min_value=0.1, value=1.0, step=0.1, format="%.2f")
+    beta = st.sidebar.number_input("Beta (heuristic importance)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
+    rho = st.sidebar.number_input("Rho (pheromone evaporation)", min_value=0.01, max_value=1.0, value=0.1, step=0.01, format="%.2f")
+    Q = st.sidebar.number_input("Q (pheromone deposit)", min_value=0.1, value=1.0, step=0.1, format="%.2f")
+    vehicle_capacity = st.sidebar.number_input("Vehicle Capacity", min_value=1, value=default_capacity, step=1)
 
     # --------------------------
     # Step 4: Initialize pheromone
@@ -144,16 +155,16 @@ if uploaded_file:
 
         # Plot convergence
         st.subheader("Convergence Over Iterations")
-        fig, ax = plt.subplots()
+        fig_conv, ax = plt.subplots()
         ax.plot(range(1, len(convergence)+1), convergence, marker='o')
         ax.set_xlabel("Iteration")
         ax.set_ylabel("Best Total Distance")
         ax.set_title("ACO Convergence Curve")
-        st.pyplot(fig)
+        st.pyplot(fig_conv)
 
         # Plot routes
         st.subheader("Route Visualization")
-        fig, ax = plt.subplots(figsize=(8,6))
+        fig_routes, ax = plt.subplots(figsize=(8,6))
         for route in best_routes:
             x = [data.loc[node, 'x'] for node in route]
             y = [data.loc[node, 'y'] for node in route]
@@ -164,4 +175,4 @@ if uploaded_file:
         ax.set_ylabel("Y coordinate")
         ax.legend()
         ax.grid(True)
-        st.pyplot(fig)
+        st.pyplot(fig_routes)
