@@ -95,8 +95,7 @@ if uploaded_file:
             route.append(0)  # return to depot
             routes.append(route)
 
-        # Convert np.int64 to normal int for display
-        routes = [[int(n) for n in r] for r in routes]
+        routes = [[int(n) for n in r] for r in routes]  # Convert np.int64 to int
         return routes
 
     def total_distance(routes, distance_matrix):
@@ -154,6 +153,12 @@ if uploaded_file:
         ax.set_xlabel("Iteration")
         ax.set_ylabel("Best Total Distance")
         ax.set_title("ACO Convergence Curve")
+
+        # Set Y-axis as requested (bottom 2.8 to top 6.8)
+        ax.set_ylim(2.8, 6.8)
+        ax.set_yticks([2.8, 5.6, 6.0, 6.2, 6.4, 6.6, 6.8])
+        ax.set_yticklabels(['2.8', '5.6', '6.0', '6.2', '6.4', '6.6', '6.8'])
+
         st.pyplot(fig_conv)
 
         # Route visualization
