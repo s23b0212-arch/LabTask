@@ -25,10 +25,7 @@ if uploaded_file:
     st.dataframe(data.head())
 
     # Use vehicle_capacity from CSV if available, otherwise default to 10
-    if 'vehicle_capacity' in data.columns:
-        default_capacity = int(data['vehicle_capacity'][0])
-    else:
-        default_capacity = 10
+    default_capacity = int(data['vehicle_capacity'][0]) if 'vehicle_capacity' in data.columns else 10
 
     # --------------------------
     # Step 2: Distance matrix
@@ -151,7 +148,8 @@ if uploaded_file:
         # --------------------------
         st.subheader("Best Routes Found")
         for i, route in enumerate(best_routes, 1):
-            st.write(f"Route {i}: {route}")
+            route_python_int = [int(node) for node in route]  # Convert np.int64 to int
+            st.write(f"Route {i}: {route_python_int}")
 
         # Plot convergence
         st.subheader("Convergence Over Iterations")
@@ -166,8 +164,8 @@ if uploaded_file:
         st.subheader("Route Visualization")
         fig_routes, ax = plt.subplots(figsize=(8,6))
         for route in best_routes:
-            x = [data.loc[node, 'x'] for node in route]
-            y = [data.loc[node, 'y'] for node in route]
+            x = [data.loc[int(node), 'x'] for node in route]  # Ensure int indexing
+            y = [data.loc[int(node), 'y'] for node in route]
             ax.plot(x, y, marker='o', linestyle='-', alpha=0.7)
         ax.scatter(data.loc[0, 'x'], data.loc[0, 'y'], c='red', s=100, label='Depot')
         ax.set_title("Best VRP Routes Found by ACO")
