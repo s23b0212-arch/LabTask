@@ -15,7 +15,7 @@ if uploaded_file:
     data = pd.read_csv(uploaded_file)
 
     # Check required columns
-    required_cols = ['x', 'y', 'demand']
+    required_cols = ['node_id', 'node_type', 'x', 'y', 'demand', 'vehicle_capacity']
     for col in required_cols:
         if col not in data.columns:
             st.error(f"Column '{col}' is missing in the CSV file!")
@@ -24,19 +24,15 @@ if uploaded_file:
     st.subheader("Dataset Preview")
     st.dataframe(data)  # Show full dataset
 
-    # Vehicle capacity
-    if 'vehicle_capacity' in data.columns:
-        default_capacity = int(data['vehicle_capacity'][0])
-    else:
-        default_capacity = 10
+    vehicle_capacity = int(data['vehicle_capacity'][0])
 
     # --------------------------
     # Step 2: Distance matrix
     # --------------------------
-    nodes_xy = data[['x','y']].values
+    nodes_xy = data[['x', 'y']].values
+    num_nodes = len(nodes_xy)
 
     def euclidean_distance_matrix(nodes_xy):
-        num_nodes = len(nodes_xy)
         dist_matrix = np.zeros((num_nodes, num_nodes))
         for i in range(num_nodes):
             for j in range(num_nodes):
@@ -57,26 +53,22 @@ if uploaded_file:
     beta = st.sidebar.number_input("Beta (heuristic importance)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
     rho = st.sidebar.number_input("Rho (pheromone evaporation)", min_value=0.01, max_value=1.0, value=0.1, step=0.01, format="%.2f")
     Q = st.sidebar.number_input("Q (pheromone deposit)", min_value=0.1, value=1.0, step=0.1, format="%.2f")
-    vehicle_capacity = st.sidebar.number_input("Vehicle Capacity", min_value=1, value=default_capacity, step=1)
-    random_seed = st.sidebar.number_input("Random Seed (for reproducible runs)", value=42, step=1)
 
     # --------------------------
     # Step 4: Initialize pheromone
     # --------------------------
-    num_nodes = len(data)
     pheromone = np.ones((num_nodes, num_nodes))
 
     # --------------------------
     # Step 5: Construct routes
     # --------------------------
     def construct_routes(distance_matrix, pheromone, alpha, beta, vehicle_capacity):
-        num_nodes = len(distance_matrix)
         all_customers = set(range(1, num_nodes))
         unvisited = all_customers.copy()
         routes = []
 
         while unvisited:
-            route = [0]
+            route = [0]  # start at depot
             load = 0
             current_node = 0
 
@@ -90,8 +82,9 @@ if uploaded_file:
                     tau = pheromone[current_node][c] ** alpha
                     eta = (1.0 / distance_matrix[current_node][c]) ** beta
                     probs.append(tau * eta)
+
                 probs = np.array(probs)
-                probs = probs / probs.sum()
+                probs /= probs.sum()
                 next_customer = np.random.choice(feasible_customers, p=probs)
 
                 route.append(next_customer)
@@ -99,21 +92,21 @@ if uploaded_file:
                 unvisited.remove(next_customer)
                 current_node = next_customer
 
-            route.append(0)
+            route.append(0)  # return to depot
             routes.append(route)
 
+        # Convert np.int64 to normal int for display
+        routes = [[int(n) for n in r] for r in routes]
         return routes
 
-    # Total distance function
     def total_distance(routes, distance_matrix):
         distance = 0
         for route in routes:
-            for i in range(len(route) - 1):
-                distance += distance_matrix[route[i]][route[i + 1]]
+            for i in range(len(route)-1):
+                distance += distance_matrix[route[i]][route[i+1]]
         return distance
 
-    # Update pheromone
-    def update_pheromones(pheromone, all_routes, all_distances, rho=0.1, Q=1.0):
+    def update_pheromones(pheromone, all_routes, all_distances, rho, Q):
         pheromone *= (1 - rho)
         for routes, dist in zip(all_routes, all_distances):
             for route in routes:
@@ -124,8 +117,6 @@ if uploaded_file:
     # Step 6: Run ACO main loop
     # --------------------------
     if st.button("Run ACO"):
-        np.random.seed(random_seed)  # Fix randomness for reproducible results
-
         best_distance = float('inf')
         best_routes = None
         convergence = []
@@ -156,7 +147,7 @@ if uploaded_file:
         for i, route in enumerate(best_routes, 1):
             st.write(f"Route {i}: {route}")
 
-        # Plot convergence
+        # Convergence graph
         st.subheader("Convergence Over Iterations")
         fig_conv, ax = plt.subplots()
         ax.plot(range(1, len(convergence)+1), convergence, marker='o')
@@ -165,7 +156,7 @@ if uploaded_file:
         ax.set_title("ACO Convergence Curve")
         st.pyplot(fig_conv)
 
-        # Plot routes
+        # Route visualization
         st.subheader("Route Visualization")
         fig_routes, ax = plt.subplots(figsize=(8,6))
         for route in best_routes:
