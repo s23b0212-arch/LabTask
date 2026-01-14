@@ -127,3 +127,70 @@ if uploaded_file:
             all_distances = []
 
             for _ in range(num_ants):
+                routes = construct_routes()
+                dist = total_distance(routes)
+
+                all_routes.append(routes)
+                all_distances.append(dist)
+
+                if dist < best_distance:
+                    best_distance = dist
+                    best_routes = routes
+
+            update_pheromone(all_routes, all_distances)
+            convergence.append(best_distance)
+
+        # --------------------------
+        # Figure 3: Best Total Distance
+        # --------------------------
+        st.subheader("🖼️ Figure 3: Best Total Distance")
+        st.success(f"Best Total Distance: {best_distance:.4f}")
+
+        # --------------------------
+        # Figure 4: Best Routes
+        # --------------------------
+        st.subheader("🖼️ Figure 4: Best Routes Found")
+        for i, r in enumerate(best_routes, 1):
+            st.write(f"Route {i}: {[int(n) for n in r]}")
+
+        # --------------------------
+        # Figure 5: Convergence Curve
+        # --------------------------
+        st.subheader("🖼️ Figure 5: Convergence Curve")
+
+        fig1, ax1 = plt.subplots()
+        ax1.plot(range(1, len(convergence) + 1), convergence, marker='o')
+        ax1.set_xlabel("Iteration")
+        ax1.set_ylabel("Best Total Distance")
+        ax1.set_title("ACO Convergence Curve")
+
+        # 🔴 FIXED AXIS (MATCH OLD IMAGE)
+        ax1.set_ylim(5.6, 6.8)
+
+        ax1.grid(True)
+        st.pyplot(fig1)
+
+        # --------------------------
+        # Figure 6: Route Visualization
+        # --------------------------
+        st.subheader("🖼️ Figure 6: Route Visualization")
+
+        fig2, ax2 = plt.subplots(figsize=(8, 6))
+        for r in best_routes:
+            x = [coords[int(n)][0] for n in r]
+            y = [coords[int(n)][1] for n in r]
+            ax2.plot(x, y, marker="o")
+
+        ax2.scatter(
+            coords[0][0],
+            coords[0][1],
+            c="red",
+            s=120,
+            label="Depot"
+        )
+
+        ax2.set_xlabel("X Coordinate")
+        ax2.set_ylabel("Y Coordinate")
+        ax2.legend()
+        ax2.grid(True)
+        st.pyplot(fig2)
