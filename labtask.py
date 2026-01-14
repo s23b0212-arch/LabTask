@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import random
 
 st.set_page_config(page_title="VRP - ACO Dashboard", layout="wide")
 st.title("🚚 Vehicle Routing Problem (VRP) - ACO Dashboard")
@@ -22,7 +23,7 @@ if uploaded_file:
             st.stop()
 
     st.subheader("Dataset Preview")
-    st.dataframe(data)  # Show full dataset
+    st.dataframe(data)
 
     vehicle_capacity = int(data['vehicle_capacity'][0])
 
@@ -93,10 +94,7 @@ if uploaded_file:
                 current_node = next_customer
 
             route.append(0)  # return to depot
-            routes.append(route)
-
-        # Convert np.int64 to normal int for display
-        routes = [[int(n) for n in r] for r in routes]
+            routes.append([int(n) for n in route])  # convert np.int64 to int
         return routes
 
     def total_distance(routes, distance_matrix):
@@ -154,15 +152,17 @@ if uploaded_file:
         ax.set_xlabel("Iteration")
         ax.set_ylabel("Best Total Distance")
         ax.set_title("ACO Convergence Curve")
+        ax.set_ylim(0, 6.8)  # <-- Y-axis max set to 6.8
         st.pyplot(fig_conv)
 
         # Route visualization
         st.subheader("Route Visualization")
         fig_routes, ax = plt.subplots(figsize=(8,6))
-        for route in best_routes:
+        colors = plt.cm.tab20(np.linspace(0, 1, len(best_routes)))  # unique color for each route
+        for route, color in zip(best_routes, colors):
             x = [data.loc[node, 'x'] for node in route]
             y = [data.loc[node, 'y'] for node in route]
-            ax.plot(x, y, marker='o', linestyle='-', alpha=0.7)
+            ax.plot(x, y, marker='o', linestyle='-', alpha=0.7, color=color)
         ax.scatter(data.loc[0, 'x'], data.loc[0, 'y'], c='red', s=100, label='Depot')
         ax.set_title("Best VRP Routes Found by ACO")
         ax.set_xlabel("X coordinate")
