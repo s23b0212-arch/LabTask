@@ -21,11 +21,14 @@ if uploaded_file:
             st.error(f"Column '{col}' is missing in the CSV file!")
             st.stop()
 
-    st.subheader("Dataset Preview (Full Data)")
-    st.dataframe(data)  # show full dataset
+    st.subheader("Dataset Preview")
+    st.dataframe(data)  # Show full dataset
 
-    # Use vehicle_capacity from CSV if available, otherwise default to 10
-    default_capacity = int(data['vehicle_capacity'][0]) if 'vehicle_capacity' in data.columns else 10
+    # Vehicle capacity
+    if 'vehicle_capacity' in data.columns:
+        default_capacity = int(data['vehicle_capacity'][0])
+    else:
+        default_capacity = 10
 
     # --------------------------
     # Step 2: Distance matrix
@@ -55,6 +58,7 @@ if uploaded_file:
     rho = st.sidebar.number_input("Rho (pheromone evaporation)", min_value=0.01, max_value=1.0, value=0.1, step=0.01, format="%.2f")
     Q = st.sidebar.number_input("Q (pheromone deposit)", min_value=0.1, value=1.0, step=0.1, format="%.2f")
     vehicle_capacity = st.sidebar.number_input("Vehicle Capacity", min_value=1, value=default_capacity, step=1)
+    random_seed = st.sidebar.number_input("Random Seed (for reproducible runs)", value=42, step=1)
 
     # --------------------------
     # Step 4: Initialize pheromone
@@ -120,6 +124,8 @@ if uploaded_file:
     # Step 6: Run ACO main loop
     # --------------------------
     if st.button("Run ACO"):
+        np.random.seed(random_seed)  # Fix randomness for reproducible results
+
         best_distance = float('inf')
         best_routes = None
         convergence = []
@@ -148,8 +154,7 @@ if uploaded_file:
         # --------------------------
         st.subheader("Best Routes Found")
         for i, route in enumerate(best_routes, 1):
-            clean_route = [int(node) for node in route]  # convert np.int64 to int
-            st.write(f"Route {i}: {clean_route}")
+            st.write(f"Route {i}: {route}")
 
         # Plot convergence
         st.subheader("Convergence Over Iterations")
@@ -163,13 +168,10 @@ if uploaded_file:
         # Plot routes
         st.subheader("Route Visualization")
         fig_routes, ax = plt.subplots(figsize=(8,6))
-        colors = ['b', 'g', 'c', 'm', 'y', 'k']
-        for idx, route in enumerate(best_routes):
+        for route in best_routes:
             x = [data.loc[node, 'x'] for node in route]
             y = [data.loc[node, 'y'] for node in route]
-            ax.plot(x, y, marker='o', linestyle='-', alpha=0.7, color=colors[idx % len(colors)], label=f"Route {idx+1}")
-            for xi, yi, node in zip(x, y, route):
-                ax.text(xi, yi, str(node), fontsize=9, ha='right')
+            ax.plot(x, y, marker='o', linestyle='-', alpha=0.7)
         ax.scatter(data.loc[0, 'x'], data.loc[0, 'y'], c='red', s=100, label='Depot')
         ax.set_title("Best VRP Routes Found by ACO")
         ax.set_xlabel("X coordinate")
