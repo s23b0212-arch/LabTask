@@ -3,18 +3,20 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+# -------------------------------------------------
+# Page Config
+# -------------------------------------------------
 st.set_page_config(page_title="VRP - ACO Dashboard", layout="wide")
 st.title("🚚 Vehicle Routing Problem (VRP) - ACO Dashboard")
 
-# --------------------------
-# Step 1: Upload dataset
-# --------------------------
+# -------------------------------------------------
+# Upload Dataset
+# -------------------------------------------------
 uploaded_file = st.file_uploader("Upload your VRP CSV dataset", type="csv")
 
 if uploaded_file:
     data = pd.read_csv(uploaded_file)
 
-    # Check required columns
     required_cols = ['node_id', 'node_type', 'x', 'y', 'demand', 'vehicle_capacity']
     for col in required_cols:
         if col not in data.columns:
@@ -22,99 +24,99 @@ if uploaded_file:
             st.stop()
 
     st.subheader("Dataset Preview")
-    st.dataframe(data)  # Show full dataset
+    st.dataframe(data)
 
     vehicle_capacity = int(data['vehicle_capacity'][0])
 
-    # --------------------------
-    # Step 2: Distance matrix
-    # --------------------------
+    # -------------------------------------------------
+    # Distance Matrix
+    # -------------------------------------------------
     nodes_xy = data[['x', 'y']].values
     num_nodes = len(nodes_xy)
 
-    def euclidean_distance_matrix(nodes_xy):
-        dist_matrix = np.zeros((num_nodes, num_nodes))
+    def euclidean_distance_matrix(nodes):
+        dist = np.zeros((num_nodes, num_nodes))
         for i in range(num_nodes):
             for j in range(num_nodes):
-                dx = nodes_xy[i][0] - nodes_xy[j][0]
-                dy = nodes_xy[i][1] - nodes_xy[j][1]
-                dist_matrix[i][j] = np.sqrt(dx**2 + dy**2)
-        return dist_matrix
+                dx = nodes[i][0] - nodes[j][0]
+                dy = nodes[i][1] - nodes[j][1]
+                dist[i][j] = np.sqrt(dx**2 + dy**2)
+        return dist
 
     distance_matrix = euclidean_distance_matrix(nodes_xy)
 
-    # --------------------------
-    # Step 3: ACO Parameters (Interactive)
-    # --------------------------
+    # -------------------------------------------------
+    # Sidebar Parameters
+    # -------------------------------------------------
     st.sidebar.header("ACO Parameters")
-    num_ants = st.sidebar.number_input("Number of Ants", min_value=1, value=10, step=1)
-    num_iterations = st.sidebar.number_input("Number of Iterations", min_value=1, value=50, step=1)
-    alpha = st.sidebar.number_input("Alpha (pheromone importance)", min_value=0.1, value=1.0, step=0.1, format="%.2f")
-    beta = st.sidebar.number_input("Beta (heuristic importance)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
-    rho = st.sidebar.number_input("Rho (pheromone evaporation)", min_value=0.01, max_value=1.0, value=0.1, step=0.01, format="%.2f")
-    Q = st.sidebar.number_input("Q (pheromone deposit)", min_value=0.1, value=1.0, step=0.1, format="%.2f")
+    num_ants = st.sidebar.number_input("Number of Ants", 1, 100, 10)
+    num_iterations = st.sidebar.number_input("Iterations", 1, 200, 50)
+    alpha = st.sidebar.number_input("Alpha (α)", 0.1, 5.0, 1.0)
+    beta = st.sidebar.number_input("Beta (β)", 0.1, 10.0, 5.0)
+    rho = st.sidebar.number_input("Evaporation (ρ)", 0.01, 1.0, 0.1)
+    Q = st.sidebar.number_input("Pheromone Deposit (Q)", 0.1, 10.0, 1.0)
 
-    # --------------------------
-    # Step 4: Initialize pheromone
-    # --------------------------
+    # -------------------------------------------------
+    # Initialize Pheromone
+    # -------------------------------------------------
     pheromone = np.ones((num_nodes, num_nodes))
 
-    # --------------------------
-    # Step 5: Construct routes
-    # --------------------------
-    def construct_routes(distance_matrix, pheromone, alpha, beta, vehicle_capacity):
-        all_customers = set(range(1, num_nodes))
-        unvisited = all_customers.copy()
+    # -------------------------------------------------
+    # ACO Functions
+    # -------------------------------------------------
+    def construct_routes():
+        unvisited = set(range(1, num_nodes))
         routes = []
 
         while unvisited:
-            route = [0]  # start at depot
+            route = [0]
             load = 0
-            current_node = 0
+            current = 0
 
             while True:
-                feasible_customers = [c for c in unvisited if load + data.loc[c, 'demand'] <= vehicle_capacity]
-                if not feasible_customers:
+                feasible = [c for c in unvisited
+                            if load + data.loc[c, 'demand'] <= vehicle_capacity]
+                if not feasible:
                     break
 
                 probs = []
-                for c in feasible_customers:
-                    tau = pheromone[current_node][c] ** alpha
-                    eta = (1.0 / distance_matrix[current_node][c]) ** beta
+                for c in feasible:
+                    tau = pheromone[current][c] ** alpha
+                    eta = (1 / distance_matrix[current][c]) ** beta
                     probs.append(tau * eta)
 
                 probs = np.array(probs)
                 probs /= probs.sum()
-                next_customer = np.random.choice(feasible_customers, p=probs)
+                next_node = np.random.choice(feasible, p=probs)
 
-                route.append(next_customer)
-                load += data.loc[next_customer, 'demand']
-                unvisited.remove(next_customer)
-                current_node = next_customer
+                route.append(int(next_node))
+                load += data.loc[next_node, 'demand']
+                unvisited.remove(next_node)
+                current = next_node
 
-            route.append(0)  # return to depot
+            route.append(0)
             routes.append(route)
 
-        routes = [[int(n) for n in r] for r in routes]  # Convert np.int64 to int
         return routes
 
-    def total_distance(routes, distance_matrix):
-        distance = 0
+    def total_distance(routes):
+        dist = 0
         for route in routes:
-            for i in range(len(route)-1):
-                distance += distance_matrix[route[i]][route[i+1]]
-        return distance
+            for i in range(len(route) - 1):
+                dist += distance_matrix[route[i]][route[i + 1]]
+        return dist
 
-    def update_pheromones(pheromone, all_routes, all_distances, rho, Q):
-        pheromone *= (1 - rho)
+    def update_pheromones(all_routes, all_distances):
+        nonlocal_pheromone = pheromone
+        nonlocal_pheromone *= (1 - rho)
         for routes, dist in zip(all_routes, all_distances):
             for route in routes:
-                for i in range(len(route)-1):
-                    pheromone[route[i]][route[i+1]] += Q / dist
+                for i in range(len(route) - 1):
+                    nonlocal_pheromone[route[i]][route[i + 1]] += Q / dist
 
-    # --------------------------
-    # Step 6: Run ACO main loop
-    # --------------------------
+    # -------------------------------------------------
+    # Run ACO
+    # -------------------------------------------------
     if st.button("Run ACO"):
         best_distance = float('inf')
         best_routes = None
@@ -124,9 +126,10 @@ if uploaded_file:
             all_routes = []
             all_distances = []
 
-            for ant in range(num_ants):
-                routes = construct_routes(distance_matrix, pheromone, alpha, beta, vehicle_capacity)
-                dist = total_distance(routes, distance_matrix)
+            for _ in range(num_ants):
+                routes = construct_routes()
+                dist = total_distance(routes)
+
                 all_routes.append(routes)
                 all_distances.append(dist)
 
@@ -134,44 +137,55 @@ if uploaded_file:
                     best_distance = dist
                     best_routes = routes
 
-            update_pheromones(pheromone, all_routes, all_distances, rho, Q)
+            update_pheromones(all_routes, all_distances)
             convergence.append(best_distance)
 
-        st.success(f"✅ ACO Completed! Best Total Distance: {best_distance:.4f}")
+        # -------------------------------------------------
+        # Results
+        # -------------------------------------------------
+        st.success(f"✅ Best Distance Found: {best_distance:.4f}")
 
-        # --------------------------
-        # Step 7: Display Best Routes
-        # --------------------------
-        st.subheader("Best Routes Found")
-        for i, route in enumerate(best_routes, 1):
-            st.write(f"Route {i}: {route}")
+        st.subheader("Best Routes")
+        for i, r in enumerate(best_routes, 1):
+            st.write(f"Route {i}: {r}")
 
-        # Convergence graph
-        st.subheader("Convergence Over Iterations")
-        fig_conv, ax = plt.subplots()
-        ax.plot(range(1, len(convergence)+1), convergence, marker='o')
+        # -------------------------------------------------
+        # Convergence Graph (REPORT READY)
+        # -------------------------------------------------
+        st.subheader("ACO Convergence Curve (Figure 4.4)")
+
+        fig, ax = plt.subplots()
+        ax.plot(range(1, len(convergence) + 1), convergence, marker='o')
+
         ax.set_xlabel("Iteration")
         ax.set_ylabel("Best Total Distance")
         ax.set_title("ACO Convergence Curve")
 
-        # Set Y-axis as requested (bottom 2.8 to top 6.8)
-        ax.set_ylim(2.8, 6.8)
-        ax.set_yticks([2.8, 5.6, 6.0, 6.2, 6.4, 6.6, 6.8])
-        ax.set_yticklabels(['2.8', '5.6', '6.0', '6.2', '6.4', '6.6', '6.8'])
+        # FIXED SCALE + INVERTED AXIS
+        ax.set_ylim(5.6, 6.8)
+        ax.set_yticks([5.6, 6.0, 6.2, 6.4, 6.6, 6.8])
+        ax.invert_yaxis()
 
-        st.pyplot(fig_conv)
-
-        # Route visualization
-        st.subheader("Route Visualization")
-        fig_routes, ax = plt.subplots(figsize=(8,6))
-        for route in best_routes:
-            x = [data.loc[node, 'x'] for node in route]
-            y = [data.loc[node, 'y'] for node in route]
-            ax.plot(x, y, marker='o', linestyle='-', alpha=0.7)
-        ax.scatter(data.loc[0, 'x'], data.loc[0, 'y'], c='red', s=100, label='Depot')
-        ax.set_title("Best VRP Routes Found by ACO")
-        ax.set_xlabel("X coordinate")
-        ax.set_ylabel("Y coordinate")
-        ax.legend()
         ax.grid(True)
-        st.pyplot(fig_routes)
+        st.pyplot(fig)
+
+        # -------------------------------------------------
+        # Route Visualization
+        # -------------------------------------------------
+        st.subheader("Best Route Visualization")
+
+        fig2, ax2 = plt.subplots(figsize=(8, 6))
+        for route in best_routes:
+            x = [data.loc[n, 'x'] for n in route]
+            y = [data.loc[n, 'y'] for n in route]
+            ax2.plot(x, y, marker='o')
+
+        ax2.scatter(data.loc[0, 'x'], data.loc[0, 'y'],
+                    c='red', s=120, label='Depot')
+
+        ax2.set_title("Best VRP Routes Found by ACO")
+        ax2.set_xlabel("X Coordinate")
+        ax2.set_ylabel("Y Coordinate")
+        ax2.legend()
+        ax2.grid(True)
+        st.pyplot(fig2)
