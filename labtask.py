@@ -2,134 +2,140 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-np.random.seed(42)
-# --------------------------
-# Page Configuration
-# --------------------------
+
 st.set_page_config(page_title="VRP - ACO Dashboard", layout="wide")
-st.title("🚚 Vehicle Routing Problem (VRP) using Ant Colony Optimization")
+st.title("🚚 Vehicle Routing Problem (VRP) - ACO Dashboard")
 
 # --------------------------
-# Upload Dataset
+# Step 1: Upload dataset
 # --------------------------
-uploaded_file = st.file_uploader("Upload VRP CSV Dataset", type="csv")
+uploaded_file = st.file_uploader("Upload your VRP CSV dataset", type="csv")
 
 if uploaded_file:
     data = pd.read_csv(uploaded_file)
 
-    # Required columns check
-    required_cols = ["x", "y", "demand"]
+    # Check required columns
+    required_cols = ['x', 'y', 'demand']
     for col in required_cols:
         if col not in data.columns:
-            st.error(f"Missing required column: {col}")
+            st.error(f"Column '{col}' is missing in the CSV file!")
             st.stop()
 
-    # --------------------------
-    # Figure 1: Dataset Preview
-    # --------------------------
-    st.subheader("🖼️ Figure 1: Dataset Preview")
-    st.dataframe(data)
+    st.subheader("Dataset Preview")
+    st.dataframe(data.head())
 
-    vehicle_capacity = int(data["vehicle_capacity"][0])
-
-    # --------------------------
-    # Distance Matrix
-    # --------------------------
-    coords = data[["x", "y"]].values
-    n_nodes = len(coords)
-
-    dist_matrix = np.zeros((n_nodes, n_nodes))
-    for i in range(n_nodes):
-        for j in range(n_nodes):
-            dist_matrix[i][j] = np.sqrt(
-                (coords[i][0] - coords[j][0])**2 +
-                (coords[i][1] - coords[j][1])**2
-            )
+    # Use vehicle_capacity from CSV if available, otherwise default to 10
+    if 'vehicle_capacity' in data.columns:
+        default_capacity = int(data['vehicle_capacity'][0])
+    else:
+        default_capacity = 10
 
     # --------------------------
-    # Figure 2: ACO Parameters
+    # Step 2: Distance matrix
     # --------------------------
-    st.sidebar.header("🖼️ Figure 2: ACO Parameter Control Panel")
+    nodes_xy = data[['x','y']].values
 
-    num_ants = st.sidebar.number_input("Number of Ants", 1, 50, 10)
-    iterations = st.sidebar.number_input("Iterations", 1, 200, 50)
-    alpha = st.sidebar.number_input("Alpha (pheromone importance)", 0.1, 5.0, 1.0)
-    beta = st.sidebar.number_input("Beta (heuristic importance)", 0.1, 10.0, 5.0)
-    rho = st.sidebar.number_input("Rho (evaporation rate)", 0.01, 1.0, 0.1)
-    Q = st.sidebar.number_input("Q (pheromone deposit)", 0.1, 10.0, 1.0)
+    def euclidean_distance_matrix(nodes_xy):
+        num_nodes = len(nodes_xy)
+        dist_matrix = np.zeros((num_nodes, num_nodes))
+        for i in range(num_nodes):
+            for j in range(num_nodes):
+                dx = nodes_xy[i][0] - nodes_xy[j][0]
+                dy = nodes_xy[i][1] - nodes_xy[j][1]
+                dist_matrix[i][j] = np.sqrt(dx**2 + dy**2)
+        return dist_matrix
 
-    pheromone = np.ones((n_nodes, n_nodes))
+    distance_matrix = euclidean_distance_matrix(nodes_xy)
 
     # --------------------------
-    # ACO Functions
+    # Step 3: ACO Parameters (Interactive)
     # --------------------------
-    def construct_routes():
-        unvisited = set(range(1, n_nodes))
+    st.sidebar.header("ACO Parameters")
+    num_ants = st.sidebar.number_input("Number of Ants", min_value=1, value=10, step=1)
+    num_iterations = st.sidebar.number_input("Number of Iterations", min_value=1, value=50, step=1)
+    alpha = st.sidebar.number_input("Alpha (pheromone importance)", min_value=0.1, value=1.0, step=0.1, format="%.2f")
+    beta = st.sidebar.number_input("Beta (heuristic importance)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
+    rho = st.sidebar.number_input("Rho (pheromone evaporation)", min_value=0.01, max_value=1.0, value=0.1, step=0.01, format="%.2f")
+    Q = st.sidebar.number_input("Q (pheromone deposit)", min_value=0.1, value=1.0, step=0.1, format="%.2f")
+    vehicle_capacity = st.sidebar.number_input("Vehicle Capacity", min_value=1, value=default_capacity, step=1)
+
+    # --------------------------
+    # Step 4: Initialize pheromone
+    # --------------------------
+    num_nodes = len(data)
+    pheromone = np.ones((num_nodes, num_nodes))
+
+    # --------------------------
+    # Step 5: Construct routes
+    # --------------------------
+    def construct_routes(distance_matrix, pheromone, alpha, beta, vehicle_capacity):
+        num_nodes = len(distance_matrix)
+        all_customers = set(range(1, num_nodes))
+        unvisited = all_customers.copy()
         routes = []
 
         while unvisited:
             route = [0]
             load = 0
-            current = 0
+            current_node = 0
 
             while True:
-                feasible = [
-                    c for c in unvisited
-                    if load + data.loc[c, "demand"] <= vehicle_capacity
-                ]
-                if not feasible:
+                feasible_customers = [c for c in unvisited if load + data.loc[c, 'demand'] <= vehicle_capacity]
+                if not feasible_customers:
                     break
 
                 probs = []
-                for c in feasible:
-                    tau = pheromone[current][c] ** alpha
-                    eta = (1 / dist_matrix[current][c]) ** beta
+                for c in feasible_customers:
+                    tau = pheromone[current_node][c] ** alpha
+                    eta = (1.0 / distance_matrix[current_node][c]) ** beta
                     probs.append(tau * eta)
-
                 probs = np.array(probs)
-                probs /= probs.sum()
-                next_node = np.random.choice(feasible, p=probs)
+                probs = probs / probs.sum()
+                next_customer = np.random.choice(feasible_customers, p=probs)
 
-                route.append(next_node)
-                load += data.loc[next_node, "demand"]
-                unvisited.remove(next_node)
-                current = next_node
+                route.append(int(next_customer))  # FIX: remove np.int64
+                load += data.loc[next_customer, 'demand']
+                unvisited.remove(next_customer)
+                current_node = next_customer
 
             route.append(0)
             routes.append(route)
 
+        # FIX: ensure all values are normal int
+        routes = [[int(n) for n in r] for r in routes]
         return routes
 
-    def total_distance(routes):
-        d = 0
-        for r in routes:
-            for i in range(len(r) - 1):
-                d += dist_matrix[r[i]][r[i + 1]]
-        return d
+    # Total distance function
+    def total_distance(routes, distance_matrix):
+        distance = 0
+        for route in routes:
+            for i in range(len(route) - 1):
+                distance += distance_matrix[route[i]][route[i + 1]]
+        return distance
 
-    def update_pheromone(all_routes, all_distances):
-        pheromone[:] *= (1 - rho)
+    # Update pheromone
+    def update_pheromones(pheromone, all_routes, all_distances, rho=0.1, Q=1.0):
+        pheromone *= (1 - rho)
         for routes, dist in zip(all_routes, all_distances):
-            for r in routes:
-                for i in range(len(r) - 1):
-                    pheromone[r[i]][r[i + 1]] += Q / dist
+            for route in routes:
+                for i in range(len(route)-1):
+                    pheromone[route[i]][route[i+1]] += Q / dist
 
     # --------------------------
-    # Run ACO
+    # Step 6: Run ACO main loop
     # --------------------------
     if st.button("Run ACO"):
-        best_distance = float("inf")
+        best_distance = float('inf')
         best_routes = None
         convergence = []
 
-        for _ in range(iterations):
+        for iteration in range(num_iterations):
             all_routes = []
             all_distances = []
 
-            for _ in range(num_ants):
-                routes = construct_routes()
-                dist = total_distance(routes)
-
+            for ant in range(num_ants):
+                routes = construct_routes(distance_matrix, pheromone, alpha, beta, vehicle_capacity)
+                dist = total_distance(routes, distance_matrix)
                 all_routes.append(routes)
                 all_distances.append(dist)
 
@@ -137,60 +143,38 @@ if uploaded_file:
                     best_distance = dist
                     best_routes = routes
 
-            update_pheromone(all_routes, all_distances)
+            update_pheromones(pheromone, all_routes, all_distances, rho, Q)
             convergence.append(best_distance)
 
-        # --------------------------
-        # Figure 3: Best Total Distance
-        # --------------------------
-        st.subheader("🖼️ Figure 3: Best Total Distance")
-        st.success(f"Best Total Distance: {best_distance:.4f}")
+        st.success(f"✅ ACO Completed! Best Total Distance: {best_distance:.4f}")
 
         # --------------------------
-        # Figure 4: Best Routes
+        # Step 7: Display Best Routes
         # --------------------------
-        st.subheader("🖼️ Figure 4: Best Routes Found")
-        for i, r in enumerate(best_routes, 1):
-            st.write(f"Route {i}: {[int(n) for n in r]}")
+        st.subheader("Best Routes Found")
+        for i, route in enumerate(best_routes, 1):
+            st.write(f"Route {i}: {route}")
 
-        # --------------------------
-        # Figure 5: Convergence Curve
-        # --------------------------
-        st.subheader("🖼️ Figure 5: Convergence Curve")
+        # Plot convergence
+        st.subheader("Convergence Over Iterations")
+        fig_conv, ax = plt.subplots()
+        ax.plot(range(1, len(convergence)+1), convergence, marker='o')
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Best Total Distance")
+        ax.set_title("ACO Convergence Curve")
+        st.pyplot(fig_conv)
 
-        fig1, ax1 = plt.subplots()
-        ax1.plot(range(1, len(convergence) + 1), convergence, marker='o')
-        ax1.set_xlabel("Iteration")
-        ax1.set_ylabel("Best Total Distance")
-        ax1.set_title("ACO Convergence Curve")
-
-        # 🔴 FIXED AXIS (MATCH OLD IMAGE)
-        ax1.set_ylim(5.6, 6.8)
-
-        ax1.grid(True)
-        st.pyplot(fig1)
-
-        # --------------------------
-        # Figure 6: Route Visualization
-        # --------------------------
-        st.subheader("🖼️ Figure 6: Route Visualization")
-
-        fig2, ax2 = plt.subplots(figsize=(8, 6))
-        for r in best_routes:
-            x = [coords[int(n)][0] for n in r]
-            y = [coords[int(n)][1] for n in r]
-            ax2.plot(x, y, marker="o")
-
-        ax2.scatter(
-            coords[0][0],
-            coords[0][1],
-            c="red",
-            s=120,
-            label="Depot"
-        )
-
-        ax2.set_xlabel("X Coordinate")
-        ax2.set_ylabel("Y Coordinate")
-        ax2.legend()
-        ax2.grid(True)
-        st.pyplot(fig2)
+        # Plot routes
+        st.subheader("Route Visualization")
+        fig_routes, ax = plt.subplots(figsize=(8,6))
+        for route in best_routes:
+            x = [data.loc[node, 'x'] for node in route]
+            y = [data.loc[node, 'y'] for node in route]
+            ax.plot(x, y, marker='o', linestyle='-', alpha=0.7)
+        ax.scatter(data.loc[0, 'x'], data.loc[0, 'y'], c='red', s=100, label='Depot')
+        ax.set_title("Best VRP Routes Found by ACO")
+        ax.set_xlabel("X coordinate")
+        ax.set_ylabel("Y coordinate")
+        ax.legend()
+        ax.grid(True)
+        st.pyplot(fig_routes)
